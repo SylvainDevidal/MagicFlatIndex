@@ -1,5 +1,5 @@
 ﻿using System;
-
+using System.Diagnostics;
 using MagicFlatIndex;
 
 namespace TestFlatFile
@@ -8,18 +8,8 @@ namespace TestFlatFile
     {
         static void Main()
         {
-            const int PERSON_COUNT = 1000000;
-
-            Console.WriteLine("Generate names...");
-            Person[] persons = new Person[PERSON_COUNT];
-            for (int i = 0; i < PERSON_COUNT; )
-            {
-                persons[i] = new Person() { Id = ++i, Prenom = $"Firstname {i}", Nom = $"Lastname {i}" };
-            }
-
-            Console.WriteLine("Shuffle names..."); 
-            Random rnd = new Random();
-            rnd.Shuffle(persons);
+            const int PERSONS_COUNT = 5000000;
+            const int PERSONS_TO_SEARCH = 100000;
 
             Console.WriteLine("Open file...");
             using (FlatFile<Person> personFile = new FlatFile<Person>("person"))
@@ -27,70 +17,86 @@ namespace TestFlatFile
                 Console.WriteLine("Clear file...");
                 personFile.Truncate();
 
-                Console.WriteLine("Insert names...");
-                for (int i = 0; i < persons.Length; i++)
+                Console.WriteLine("Generate names... (1/2)");
+                Person[] persons = new Person[PERSONS_COUNT];
+                for (int i = 0; i < PERSONS_COUNT;)
                 {
-                    personFile.Insert(persons[i]);
+                    persons[i] = new Person() { Id = ++i, Prenom = $"Firstname {i}", Nom = $"Lastname {i}" };
                 }
 
-                Console.WriteLine("Load all the names...");
-                Person[] res = personFile.SelectAll();
-                Console.WriteLine($"The data file contains {res.Length} names");
+                Console.WriteLine("Shuffle names... (1/2)");
+                Random rnd = new Random();
+                rnd.Shuffle(persons);
 
-                Console.WriteLine("Search key 100 000 :");
-                Person p = personFile.Select(100000);
-                if (p == null)
-                {
-                    Console.WriteLine("Not found...");
-                }
-                else
-                {
-                    Console.WriteLine(p);
-                    Console.WriteLine("Change it to Alfred E.Neuman...");
-                    p.Prenom = "Alfred";
-                    p.Nom = "E.Neuman";
-                    personFile.Update(p);
-                }
+                Stopwatch sw = Stopwatch.StartNew();
 
-                Console.WriteLine("Search key 200 000 :");
-                p = personFile.Select(200000);
-                if (p == null)
+                Console.WriteLine("Insert names... (1/2)");
+                Console.WriteLine($"{personFile.InsertMany(persons)} person(s) added");
+
+                sw.Stop();
+                Console.WriteLine($"Time to add {PERSONS_COUNT} persons : {sw.ElapsedMilliseconds} ms"); 
+                Console.WriteLine($"Average time per record : {sw.ElapsedTicks / PERSONS_COUNT} ticks");
+
+                Console.WriteLine("Generate names... (2/2)");
+                persons = new Person[PERSONS_COUNT];
+                for (int i = 0; i < PERSONS_COUNT;)
                 {
-                    Console.WriteLine("Not found...");
-                }
-                else
-                {
-                    Console.WriteLine(p);
+                    persons[i] = new Person() { Id = ++i + PERSONS_COUNT, Prenom = $"Firstname {i + PERSONS_COUNT}", Nom = $"Lastname {i + PERSONS_COUNT}" };
                 }
 
-                Console.WriteLine("Search key 100 000 :");
-                p = personFile.Select(100000);
-                if (p == null)
+                Console.WriteLine("Shuffle names... (2/2)");
+                rnd.Shuffle(persons);
+
+                sw = Stopwatch.StartNew();
+
+                Console.WriteLine("Insert names... (2/2)");
+                Console.WriteLine($"{personFile.InsertMany(persons)} person(s) added");
+
+                sw.Stop();
+                Console.WriteLine($"Time to add {PERSONS_COUNT} persons : {sw.ElapsedMilliseconds} ms");
+                Console.WriteLine($"Average time per record : {sw.ElapsedTicks / PERSONS_COUNT} ticks");
+
+                Console.WriteLine("Insert on person...");
+                sw = Stopwatch.StartNew();
+                personFile.Insert(new Person { Id = PERSONS_COUNT * 2 + 1, Prenom = "Roger", Nom = "Rabbit" });
+                sw.Stop();
+                Console.WriteLine($"Time to add 1 persons : {sw.ElapsedTicks} ticks");
+
+                Console.WriteLine($"There are {personFile.CountRecords()} persons in the file");
+
+                Console.WriteLine("Generate a list of persons to find...");
+                int[] indices = new int[PERSONS_TO_SEARCH];
+                for (int i = 0; i < PERSONS_TO_SEARCH; i++)
                 {
-                    Console.WriteLine("Not found...");
-                }
-                else
-                {
-                    Console.WriteLine(p);
+                    indices[i] = rnd.Next(1, PERSONS_COUNT * 2 + 1);
                 }
 
-                Console.WriteLine("Delete key 200 000 :");
-                Console.WriteLine(personFile.Delete(200000));
-
-                Console.WriteLine("Search key 200 000 :");
-                p = personFile.Select(200000);
-                if (p == null)
+                Console.WriteLine("Search those persons and change even to Alfred E. Neuman or delete odd...");
+                int found = 0;
+                sw = Stopwatch.StartNew();
+                for (int i = 0; i < PERSONS_TO_SEARCH; i++)
                 {
-                    Console.WriteLine("Not found...");
+                    Person person = personFile.Select(indices[i]);
+                    if (person != null)
+                    {
+                        if (i % 2 == 0)
+                        {
+                            person.Prenom = "Alfred";
+                            person.Nom = "E. Neuman";
+                            personFile.Update(person);
+                        }
+                        else
+                        {
+                            personFile.Delete(person.Id);
+                        }
+                        found++;
+                    }
                 }
-                else
-                {
-                    Console.WriteLine(p);
-                }
+                sw.Stop();
+                Console.WriteLine($"{found} person(s) found in {sw.ElapsedMilliseconds} ms");
+                Console.WriteLine($"Average time per record : {sw.ElapsedTicks / found} ticks");
 
-                Console.WriteLine("Load all persons again...");
-                res = personFile.SelectAll();
-                Console.WriteLine($"The file contains {res.Length} names");
+                Console.WriteLine($"The file contains {personFile.CountRecords()} names");
             }
         }
     }

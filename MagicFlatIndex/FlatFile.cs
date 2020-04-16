@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 
 namespace MagicFlatIndex
@@ -101,6 +102,67 @@ namespace MagicFlatIndex
             }
         }
 
+        private bool CleanUpRecords(ref T[] records)
+        {
+            // We won't insert deleted records.
+            records = records.Where(record => record.Id != 0).ToArray();
+
+            // We must check there is no duplicated Ids.
+            if (records.GroupBy(x => x.Id).Any(g => g.Count() > 1))
+            {
+                /// TODO: Consider throwing an exception instead
+                // We can't insert the same record several times and we don't know which one to keep
+                return false;
+            }
+            else
+            {
+                for (int i = 0, length = records.Length; i < length; i++)
+                {
+                    if (Index.ContainsKey(records[i].Id))
+                    {
+                        /// TODO: Consider throwing an exception instead
+                        // We can't insert a duplicate record
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+        
+        /// <summary>
+        /// Append records to the end of the datafile. This method will update the index.
+        /// </summary>
+        /// <param name="records">Records to be inserted</param>
+        /// <returns>number of records added</returns>
+        public int InsertMany(T[] records)
+        {
+            if (records == null || records.Length == 0)
+            {
+                // We can't insert records that does not exist.
+                return 0;
+            }
+            else
+            {
+                if (CleanUpRecords(ref records))
+                {
+                    byte[] buffer = new byte[records.Length * RecordSize];
+                    DataFile.Seek(0, SeekOrigin.End);
+                    for (int i = 0, length = records.Length; i < length; i++)
+                    {
+                        records[i].ToBytes().CopyTo(buffer, i * RecordSize);
+                        Index.Add(records[i].Id, ((int)DataFile.Position / RecordSize) + i);
+                    }
+                    IndexChanged = true;
+                    DataFile.Write(buffer, 0, buffer.Length);
+                    return records.Length;
+                }
+                else
+                {
+                    return 0;
+                }
+            }
+        }
+
         /// <summary>
         /// Find the selected record. This method uses the index for better performances.
         /// </summary>
@@ -173,6 +235,15 @@ namespace MagicFlatIndex
                 found = true;
             }
             return found;
+        }
+
+        /// <summary>
+        /// Get the total records count
+        /// </summary>
+        /// <returns>Number of valid records in the data file</returns>
+        public int CountRecords()
+        {
+            return Index.Count;
         }
 
         private void SaveIndex()

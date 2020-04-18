@@ -10,8 +10,8 @@ namespace MagicFlatIndex
     {
         private const int INDEX_ENTRY_SIZE = 8;
 
-        private string DataFileName;
-        private string IndexFileName;
+        private readonly string DataFileName;
+        private readonly string IndexFileName;
 
         private FileStream DataFile;
 

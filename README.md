@@ -27,6 +27,6 @@ Enfin, mais c'est plus un choix afin de garder un code simple et concis, cette l
 
 ## Quelles sont les évolutions possibles ?
 Actuellement le gestionnaire ne bouche pas les trous libérés par des suppressions. Aussi, aucune méthode de réorganisation du fichier (tri, compression des trous) n'est présente.
-Si votre programme plante sauvagement et que la méthode `Dispose()` n'est pas appelée, alors le fichier d'index ne sera pas mis à jour. Vous aurez alors des données inconsistantes par rapport à l'index. Une méthode `RebuildIndex()` serait donc la bienvenue.
+Si votre programme plante sauvagement et que la méthode `Dispose()` n'est pas appelée, alors le fichier d'index ne sera pas mis à jour. Vous aurez alors des données inconsistantes par rapport à l'index. Une méthode `RebuildIndex()` permet de corriger le problème.
 Enfin, actuellement il n'y a qu'un seul index par fichier, qui porte uniquement sur l'Id. Il serait judicieux d'implémenter la possibilité de rajouter des index (soit mono-colonne, soit multi-colonne) afin de permettre des recherches un peu plus avancées telles que retrouver les produits de la famille X ou les clients dans le département Y.
 Il ne devrait pas être très compliqué de stocker des string (ou autres types de taille variable) non pas avec une taille fixe, mais avec une taille variable. Il suffirait pour se faire de rajouter en début de chaque propriété du record sa taille. Cependant, la sérialisation/désérialisation de `byte[]` à `object` ne sera pas des plus aisées.

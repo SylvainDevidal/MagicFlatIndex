@@ -38,18 +38,24 @@ namespace MagicFlatIndex
             DataFileName = $"{tablename}.dat";
             DataFile = File.Open(DataFileName, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
 
-            /// TODO: Implement a IndexRebuild() function to generate a new index after a crash
             // Load index : we open then close the file immediately. We will store updated data when disposing the object
             IndexFileName = $"{tablename}.idx";
-            using FileStream IndexFile = File.Open(IndexFileName, FileMode.OpenOrCreate, FileAccess.Read, FileShare.Read);
-            Index = new SortedDictionary<int, int>();
-            IndexFile.Seek(0, SeekOrigin.Begin);
-            byte[] buffer = new byte[INDEX_ENTRY_SIZE];
-            while (IndexFile.Read(buffer, 0, INDEX_ENTRY_SIZE) > 0)
+            if (!File.Exists(IndexFileName))
             {
-                Index.Add(BitConverter.ToInt32(buffer, 0), BitConverter.ToInt32(buffer, 4));
+                RebuildIndex();
             }
-            IndexFile.Close();
+            else
+            {
+                using FileStream IndexFile = File.Open(IndexFileName, FileMode.OpenOrCreate, FileAccess.Read, FileShare.Read);
+                Index = new SortedDictionary<int, int>();
+                IndexFile.Seek(0, SeekOrigin.Begin);
+                byte[] buffer = new byte[INDEX_ENTRY_SIZE];
+                while (IndexFile.Read(buffer, 0, INDEX_ENTRY_SIZE) > 0)
+                {
+                    Index.Add(BitConverter.ToInt32(buffer, 0), BitConverter.ToInt32(buffer, 4));
+                }
+                IndexFile.Close();
+            }
         }
 
         /// <summary>
@@ -72,6 +78,31 @@ namespace MagicFlatIndex
         }
 
         /// TODO: Implement a REORDER method to compact the file by sorting record and removing deleted values
+        
+        /// <summary>
+        /// Rebuild the index from the data file. This can be usefull after a crash or when the index file is missing
+        /// </summary>
+        public void RebuildIndex()
+        {
+            if (File.Exists(IndexFileName))
+            {
+                File.Delete(IndexFileName);
+            }
+            Index = new SortedDictionary<int, int>();
+
+            DataFile.Seek(0, SeekOrigin.Begin);
+            byte[] buffer = new byte[RecordSize];
+            int position = 0;
+            while (DataFile.Read(buffer, 0, RecordSize) > 0)
+            {
+                int id = BitConverter.ToInt32(buffer, 0);
+                if (id != 0)
+                {
+                    Index.Add(id, position);
+                }
+                position++;
+            }
+        }
 
         /// <summary>
         /// Append record to the end of the datafile. This method will update the index.

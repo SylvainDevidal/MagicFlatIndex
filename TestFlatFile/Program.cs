@@ -64,6 +64,17 @@ namespace TestFlatFile
 
                 Console.WriteLine($"There are {personFile.CountRecords()} persons in the file");
 
+
+                Console.WriteLine("Rebuild index...");
+
+                sw = Stopwatch.StartNew();
+
+                personFile.RebuildIndex();
+                Console.WriteLine($"Time to rebuild index : {sw.ElapsedMilliseconds} ms");
+                Console.WriteLine($"There are {personFile.CountRecords()} persons in the file");
+
+                sw.Stop();
+
                 Console.WriteLine("Generate a list of persons to find...");
                 int[] indices = new int[PERSONS_TO_SEARCH];
                 for (int i = 0; i < PERSONS_TO_SEARCH; i++)

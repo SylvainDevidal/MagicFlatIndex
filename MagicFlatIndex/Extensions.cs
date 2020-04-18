@@ -4,7 +4,7 @@ using System.Text;
 
 namespace MagicFlatIndex
 {
-    public static class StringExt
+    public static class MyExtensions
     {
         public static string Truncate(this string value, int maxLength)
         {

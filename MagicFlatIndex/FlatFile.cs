@@ -77,7 +77,49 @@ namespace MagicFlatIndex
             Index = new SortedDictionary<int, int>();
         }
 
-        /// TODO: Implement a REORDER method to compact the file by sorting record and removing deleted values
+        /// <summary>
+        /// Reorders the records in the file to fill holes, sort them by ID then reduce file size by shrinking empty space at the end
+        /// </summary>
+        /// <param name="optimize">If true, the program will just take the ending records and fill the hole withour reordering the whole file</param>
+        public void ReOrder(bool optimize)
+        {
+            if (optimize)
+            {
+                // TODO: Write the optimized method
+                throw new NotImplementedException();
+            }
+            else
+            {
+                // We create a new datafile and move the records following the index order
+                using (FileStream NewDataFile = File.Open($"{DataFileName}.tmp", FileMode.Create, FileAccess.Write, FileShare.None))
+                {
+
+                    byte[] buffer = new byte[RecordSize];
+                    foreach (KeyValuePair<int, int> entry in Index)
+                    {
+                        // Locate current record
+                        DataFile.Seek(entry.Value * RecordSize, SeekOrigin.Begin);
+                        // Load it
+                        DataFile.Read(buffer, 0, RecordSize);
+                        // Copy it to the new data file
+                        NewDataFile.Write(buffer, 0, RecordSize);
+                    }
+
+                    // Replace old datafile by the new one
+                    DataFile.Close();
+                    NewDataFile.Close();
+                }
+                File.Delete(DataFileName);
+                File.Move($"{DataFileName}.tmp", DataFileName);
+
+                // Reopen the new datafile
+                DataFile = File.Open(DataFileName, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+
+                // Now we rebuild the index
+                RebuildIndex();
+            }
+
+        }
         
         /// <summary>
         /// Rebuild the index from the data file. This can be usefull after a crash or when the index file is missing
@@ -133,7 +175,12 @@ namespace MagicFlatIndex
             }
         }
 
-        private bool CleanUpRecords(ref T[] records)
+        /// <summary>
+        /// This method will check the records we are inserting are not empty, duplicated or already existing
+        /// </summary>
+        /// <param name="records">Records to insert</param>
+        /// <returns>true if the records to insert are not valid</returns>
+        private bool CheckRecords(ref T[] records)
         {
             // We won't insert deleted records.
             records = records.Where(record => record.Id != 0).ToArray();
@@ -174,7 +221,7 @@ namespace MagicFlatIndex
             }
             else
             {
-                if (CleanUpRecords(ref records))
+                if (CheckRecords(ref records))
                 {
                     byte[] buffer = new byte[records.Length * RecordSize];
                     DataFile.Seek(0, SeekOrigin.End);

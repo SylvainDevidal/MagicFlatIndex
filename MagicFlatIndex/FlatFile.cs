@@ -18,6 +18,8 @@ namespace MagicFlatIndex
         private bool IndexChanged = false;
         private SortedDictionary<int, int> Index;
 
+        private readonly byte[] Zero = BitConverter.GetBytes(0);
+
         #region T members
         private int RecordSize { get; }
         private MethodInfo _frombytes { get; }
@@ -46,7 +48,7 @@ namespace MagicFlatIndex
             }
             else
             {
-                using FileStream IndexFile = File.Open(IndexFileName, FileMode.OpenOrCreate, FileAccess.Read, FileShare.Read);
+                using FileStream IndexFile = File.Open(IndexFileName, FileMode.OpenOrCreate, FileAccess.Read, FileShare.None);
                 Index = new SortedDictionary<int, int>();
                 IndexFile.Seek(0, SeekOrigin.Begin);
                 byte[] buffer = new byte[INDEX_ENTRY_SIZE];
@@ -80,13 +82,60 @@ namespace MagicFlatIndex
         /// <summary>
         /// Reorders the records in the file to fill holes, sort them by ID then reduce file size by shrinking empty space at the end
         /// </summary>
-        /// <param name="optimize">If true, the program will just take the ending records and fill the hole withour reordering the whole file</param>
-        public void ReOrder(bool optimize)
+        /// <param name="reorder">If true, the program will sort all records, else it will just fill the hole then free the empty space</param>
+        public void Shrink(bool reorder)
         {
-            if (optimize)
+            if (!reorder)
             {
-                // TODO: Write the optimized method
-                throw new NotImplementedException();
+                int theoricalSize = Index.Count * RecordSize;
+                if (DataFile.Length == theoricalSize)
+                {
+                    // There is no hole in the file
+                    return;
+                }
+
+                int pos = 0;
+                DataFile.Seek(pos, SeekOrigin.Begin);
+                byte[] buffer = new byte[RecordSize];
+                List<int> holes = new List<int>();
+                while (pos < theoricalSize)
+                {
+                    DataFile.Read(buffer, 0, RecordSize);
+                    int id = BitConverter.ToInt32(buffer, 0);
+                    if (id == 0)
+                    {
+                        holes.Add(pos / RecordSize);
+                    }
+                    pos += RecordSize;
+                }
+
+                foreach (int hole in holes)
+                {
+                    // Fill the holes
+                    int id = 0;
+                    while (id == 0)
+                    {
+                        DataFile.Read(buffer, 0, RecordSize);
+                        id = BitConverter.ToInt32(buffer, 0);
+                        if (id > 0)
+                        {
+                            Index[id] = hole;
+                            // Delete the record
+                            DataFile.Seek(-RecordSize, SeekOrigin.Current);
+                            DataFile.Write(Zero, 0, 4);
+                            // Move the record
+                            DataFile.Seek(hole * RecordSize, SeekOrigin.Begin);
+                            DataFile.Write(buffer, 0, RecordSize);
+                            // Get back to the current position
+                            DataFile.Seek(pos + RecordSize, SeekOrigin.Begin);
+                        }
+                        pos += RecordSize;
+                    }
+                }
+
+                // Shrink the file to is size without hole
+                DataFile.SetLength(theoricalSize);
+                DataFile.Flush();
             }
             else
             {

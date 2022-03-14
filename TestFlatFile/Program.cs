@@ -108,28 +108,18 @@ namespace TestFlatFile
                 Console.WriteLine($"Average time per record : {sw.ElapsedTicks / found} ticks");
 
                 Console.WriteLine($"The file contains {personFile.CountRecords()} names");
-                /*
-                persons = personFile.SelectAll();
-                Console.WriteLine("Persons in the file :");
-                foreach (Person p in persons)
-                {
-                    Console.WriteLine($"   {p}");
-                }
+
+                Console.WriteLine("Shrink the file (just fill the holes)...");
+                sw = Stopwatch.StartNew();
                 personFile.Shrink(false);
-                persons = personFile.SelectAll();
-                Console.WriteLine("Persons in the file after shrink :");
-                foreach (Person p in persons)
-                {
-                    Console.WriteLine($"   {p}");
-                }
+                sw.Stop();
+                Console.WriteLine($"{sw.ElapsedMilliseconds} ms");
+
+                Console.WriteLine("Reorder the whole file...");
+                sw = Stopwatch.StartNew();
                 personFile.Shrink(true);
-                persons = personFile.SelectAll();
-                Console.WriteLine("Persons in the file after reorder :");
-                foreach (Person p in persons)
-                {
-                    Console.WriteLine($"   {p}");
-                }
-                */
+                sw.Stop();
+                Console.WriteLine($"{sw.ElapsedMilliseconds} ms");
             }
         }
     }

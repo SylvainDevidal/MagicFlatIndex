@@ -1,12 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 
 namespace MagicFlatIndex
 {
-    public class FlatFile<T> : IDisposable where T : BaseFlatRecord
+    public class FlatFile<T> : List<T>, IDisposable where T : BaseFlatRecord
     {
         private const int INDEX_ENTRY_SIZE = 8;
 
@@ -20,21 +21,65 @@ namespace MagicFlatIndex
 
         private readonly byte[] Zero = BitConverter.GetBytes(0);
 
+        private bool Loaded = false;
+
         #region T members
         private int RecordSize { get; }
-        private MethodInfo _frombytes { get; }
+        private MethodInfo FromBytesMethod { get; }
 
-        private T FromBytes(byte[] data)
+        private T? FromBytes(byte[] data)
         {
-            return _frombytes.Invoke(null, new object[] { data }) as T;
+            return FromBytesMethod.Invoke(null, new object[] { data }) as T;
+        }
+        #endregion
+
+        #region List<T> members
+        public new void Add(T item)
+        {
+            Load();
+            if (item.Id == 0)
+            {
+                if (Count > 0)
+                {
+                    item.Id = this.Max(a => a.Id) + 1;
+                }
+                else
+                {
+                    item.Id = 1;
+                }
+            }
+            Insert(item);
+            base.Add(item);
+        }
+
+        public new void AddRange(IEnumerable<T> collection)
+        {
+            Load();
+            foreach (T item in collection)
+            {
+                base.Add(item);
+            }
+        }
+
+        public new void RemoveAt(int index)
+        {
+            Load();
+            Delete(this[index].Id);
+            base.RemoveAt(index);
         }
         #endregion
 
         public FlatFile(string tablename)
         {
+            Index = new SortedDictionary<int, int>();
+
             // Reflection do gather T members
-            RecordSize = (int)typeof(T).GetMethod("GetSize").Invoke(null, null);
-            _frombytes = typeof(T).GetMethod("FromBytes");
+            object? oRecordSize = typeof(T).GetMethod("GetSize")!.Invoke(null, null);
+            if (oRecordSize is not null)
+            {
+                RecordSize = (int)oRecordSize;
+            }
+            FromBytesMethod = typeof(T).GetMethod("FromBytes")!;
 
             // Data file access : we open it and keep it open as we would do many accesses
             DataFileName = $"{tablename}.dat";
@@ -49,7 +94,6 @@ namespace MagicFlatIndex
             else
             {
                 using FileStream IndexFile = File.Open(IndexFileName, FileMode.OpenOrCreate, FileAccess.Read, FileShare.None);
-                Index = new SortedDictionary<int, int>();
                 IndexFile.Seek(0, SeekOrigin.Begin);
                 byte[] buffer = new byte[INDEX_ENTRY_SIZE];
                 while (IndexFile.Read(buffer, 0, INDEX_ENTRY_SIZE) > 0)
@@ -58,6 +102,13 @@ namespace MagicFlatIndex
                 }
                 IndexFile.Close();
             }
+        }
+
+        public void Load()
+        {
+            if (Loaded) return;
+            base.AddRange(SelectAll());
+            Loaded = true;
         }
 
         /// <summary>
@@ -97,7 +148,7 @@ namespace MagicFlatIndex
                 int pos = 0;
                 DataFile.Seek(pos, SeekOrigin.Begin);
                 byte[] buffer = new byte[RecordSize];
-                List<int> holes = new List<int>();
+                List<int> holes = new();
                 while (pos < theoricalSize)
                 {
                     DataFile.Read(buffer, 0, RecordSize);
@@ -295,17 +346,16 @@ namespace MagicFlatIndex
         /// </summary>
         /// <param name="id">Record's ID</param>
         /// <returns>Found record or null is not found</returns>
-        public T Select(int id)
+        public T? Select(int id)
         {
-            T record = null;
             if (Index.TryGetValue(id, out int position))
             {
                 byte[] buffer = new byte[RecordSize];
                 DataFile.Seek(position * RecordSize, SeekOrigin.Begin);
                 DataFile.Read(buffer, 0, RecordSize);
-                record = FromBytes(buffer);
+                return FromBytes(buffer)!;
             }
-            return record;
+            return null;
         }
 
         /// <summary>
@@ -314,12 +364,12 @@ namespace MagicFlatIndex
         /// <returns>An array containing all the records from the file but not the records marked as deleted</returns>
         public T[] SelectAll()
         {
-            List<T> records = new List<T>();
+            List<T> records = new();
             DataFile.Seek(0, SeekOrigin.Begin);
             byte[] buffer = new byte[RecordSize];
             while (DataFile.Read(buffer, 0, RecordSize) > 0)
             {
-                T record = FromBytes(buffer);
+                T record = FromBytes(buffer)!;
                 if (record.Id != 0)
                 {
                     records.Add(record);
@@ -382,22 +432,19 @@ namespace MagicFlatIndex
             }
 
             // Then create a new one
-            using (FileStream IndexFile = File.Open(IndexFileName, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            using FileStream IndexFile = File.Open(IndexFileName, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            IndexFile.Seek(0, SeekOrigin.Begin);
+            byte[] buffer = new byte[INDEX_ENTRY_SIZE];
+            foreach (KeyValuePair<int, int> entry in Index)
             {
-                IndexFile.Seek(0, SeekOrigin.Begin);
-                byte[] buffer = new byte[INDEX_ENTRY_SIZE];
-                foreach (KeyValuePair<int, int> entry in Index)
-                {
-                    BitConverter.GetBytes(entry.Key).CopyTo(buffer, 0);
-                    BitConverter.GetBytes(entry.Value).CopyTo(buffer, 4);
-                    IndexFile.Write(buffer, 0, INDEX_ENTRY_SIZE);
-                }
-                IndexFile.Close();
+                BitConverter.GetBytes(entry.Key).CopyTo(buffer, 0);
+                BitConverter.GetBytes(entry.Value).CopyTo(buffer, 4);
+                IndexFile.Write(buffer, 0, INDEX_ENTRY_SIZE);
             }
+            IndexFile.Close();
         }
 
         #region Disposable pattern
-
         private bool disposed = false;
 
         public void Dispose()
@@ -419,7 +466,6 @@ namespace MagicFlatIndex
                     {
                         DataFile.Close();
                         DataFile.Dispose();
-                        DataFile = null;
                     }
 
                     // We save the index only if it was actually modified
@@ -436,9 +482,7 @@ namespace MagicFlatIndex
         ~FlatFile()
         {
             Dispose(false);
-            DataFile = null;
         }
-
         #endregion
     }
 }

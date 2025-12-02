@@ -151,7 +151,7 @@ namespace MagicFlatIndex
                 List<int> holes = new();
                 while (pos < theoricalSize)
                 {
-                    DataFile.Read(buffer, 0, RecordSize);
+                    DataFile.ReadExactly(buffer, 0, RecordSize);
                     int id = BitConverter.ToInt32(buffer, 0);
                     if (id == 0)
                     {
@@ -166,7 +166,7 @@ namespace MagicFlatIndex
                     int id = 0;
                     while (id == 0)
                     {
-                        DataFile.Read(buffer, 0, RecordSize);
+                        DataFile.ReadExactly(buffer, 0, RecordSize);
                         id = BitConverter.ToInt32(buffer, 0);
                         if (id > 0)
                         {
@@ -200,7 +200,7 @@ namespace MagicFlatIndex
                         // Locate current record
                         DataFile.Seek(entry.Value * RecordSize, SeekOrigin.Begin);
                         // Load it
-                        DataFile.Read(buffer, 0, RecordSize);
+                        DataFile.ReadExactly(buffer, 0, RecordSize);
                         // Copy it to the new data file
                         NewDataFile.Write(buffer, 0, RecordSize);
                     }
@@ -352,7 +352,7 @@ namespace MagicFlatIndex
             {
                 byte[] buffer = new byte[RecordSize];
                 DataFile.Seek(position * RecordSize, SeekOrigin.Begin);
-                DataFile.Read(buffer, 0, RecordSize);
+                DataFile.ReadExactly(buffer, 0, RecordSize);
                 return FromBytes(buffer)!;
             }
             return null;
